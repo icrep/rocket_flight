@@ -1,0 +1,16 @@
+# Ignore MATLAB binary files
+*.mex*
+
+# Ignore temporary MATLAB files
+*.asv
+*.mdl_autosave
+
+# Ignore log files
+*.log
+
+# Ignore data files
+/data/*
+
+*.syncedtex.gz
+
+

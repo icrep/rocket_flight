@@ -10,7 +10,7 @@ t(1) = 0;
 
 % Initialize Position, Velocity, and Acceleration vectors (3D)
 r(:,1) = [0; 0; 6.371e6];  % Initial position (at Earth's surface along z-axis)
-v(:,1) = [0; 0; 0];        % Initial velocity (stationary)
+v(:,1) = [100; 100; 500];  % Initial velocity (3D, with some components in x, y, z directions)
 a(:,1) = [0; 0; 0];        % Initial acceleration
 
 for i = 1:n
@@ -31,6 +31,16 @@ r = r(:,1:i+1);
 v = v(:,1:i+1);
 a = a(:,1:i);
 
+% Plotting the 3D trajectory
+figure
+plot3(r(1,:), r(2,:), r(3,:) - 6.371e6, '-k');  % Plot altitude above Earth's surface
+grid on;
+title('Rocket 3D Trajectory');
+xlabel('X Position (m)');
+ylabel('Y Position (m)');
+zlabel('Altitude (m)');
+legend({'Trajectory'}, 'Location', 'best');
+
 % Plotting the altitude (z-component of position vector)
 figure
 subplot(3,1,1);
@@ -40,13 +50,13 @@ xlabel('Time (s)');
 ylabel('Altitude (m)');
 legend({'Altitude'}, 'Location', 'Southeast');
 
-% Plotting the velocity (z-component)
+% Plotting the velocity (magnitude)
 subplot(3,1,2);
-plot(t, v(3,:), '-r');
-title('Rocket Vertical Velocity');
+plot(t, vecnorm(v, 2, 1), '-r');
+title('Rocket Velocity');
 xlabel('Time (s)');
 ylabel('Velocity (m/s)');
-legend({'Vertical Velocity'}, 'Location', 'Southeast');
+legend({'Velocity Magnitude'}, 'Location', 'Southeast');
 
 % Plotting the acceleration (magnitude)
 subplot(3,1,3);

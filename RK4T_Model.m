@@ -1,48 +1,64 @@
- % Main script
+% Main script
 clear; clc;
 
-
 T_f = input('Enter total time of simulation (s): \n');    % Total duration of the simulation.
-n = input('Enter number of time steps: \n');  % Time step size for the simulation.
+n = input('Enter number of time steps: \n');  % Number of time steps
 
-%Time Interval Set-Up
+% Time Interval Set-Up
 dt = T_f/n;
 t(1) = 0;
 
-% Initialize Velocity and Height vectors
-Hs(1) = 0;
-Vs(1) = 0;
-
-Hse(1) = 0;
-Vse(1) = 0;
+% Initialize Position, Velocity, and Acceleration vectors (3D)
+r(:,1) = [0; 0; 6.371e6];  % Initial position (at Earth's surface along z-axis)
+v(:,1) = [0; 0; 0];        % Initial velocity (stationary)
+a(:,1) = [0; 0; 0];        % Initial acceleration
 
 for i = 1:n
     t(i+1) = t(i) + dt;
 
-    % Call the rkstep function to call the vdot function
-    [Vs(i+1), Hs(i+1)] = RK4tStep(t(i), Vs(i), Hs(i), dt);
+    % Use Runge-Kutta to calculate the next step
+    [v(:,i+1), r(:,i+1), a(:,i)] = RK4tStep(t(i), v(:,i), r(:,i), dt);
 
-    % Compare to Euler's Method
-    [Vse(i+1), Hse(i+1)] = eulerRocket(t(i), Vse(i), Hse(i), dt);
+    % Stop condition if altitude returns to or goes below 0
+    if r(3,i+1) <= 6.371e6
+        break;
+    end
 end
 
+% Trim arrays to the actual length of the simulation
+t = t(1:i+1);
+r = r(:,1:i+1);
+v = v(:,1:i+1);
+a = a(:,1:i);
 
+% Plotting the altitude (z-component of position vector)
 figure
-subplot(2, 1, 1)
-plot(t, Vs, '-r', t, Vse, '--r');
-title('Rocket Velocity');
-xlabel('Time(s)');
-ylabel('Velocity (m/s)');
-legend({'RK4 Method', 'Euler Method'}, 'Location', 'Southeast');
-
-subplot(2,1,2)
-plot(t, Hs, '-b', t, Hse, '--b');
-title('Rocket Altitutude');
-xlabel('Time(s)');
+subplot(3,1,1);
+plot(t, r(3,:) - 6.371e6, '-b');  % Subtract Earth's radius to plot altitude
+title('Rocket Altitude');
+xlabel('Time (s)');
 ylabel('Altitude (m)');
-legend({'RK4 Method', 'Euler Method'}, 'Location', 'Southeast');
- 
-function [dv, dh] = vdot(t, v, h)
+legend({'Altitude'}, 'Location', 'Southeast');
+
+% Plotting the velocity (z-component)
+subplot(3,1,2);
+plot(t, v(3,:), '-r');
+title('Rocket Vertical Velocity');
+xlabel('Time (s)');
+ylabel('Velocity (m/s)');
+legend({'Vertical Velocity'}, 'Location', 'Southeast');
+
+% Plotting the acceleration (magnitude)
+subplot(3,1,3);
+plot(t(1:end-1), vecnorm(a, 2, 1), '-g');  % Magnitude of acceleration
+title('Rocket Acceleration');
+xlabel('Time (s)');
+ylabel('Acceleration (m/s^2)');
+legend({'Acceleration Magnitude'}, 'Location', 'Southeast');
+
+%% Function Definitions
+
+function [dv, dr, acc] = vdot(t, v, r)
     % Universal constants
     G = 6.67430e-11;    % Gravitational Constant
     m_e = 5.972e24;     % Earth's mass (kg)
@@ -52,51 +68,53 @@ function [dv, dh] = vdot(t, v, h)
     
     % Rocket Constants
     C_v = -4000;    % Rocket's exhaust velocity (m/s)
-    C_d = 0.5;     % Aerodynamic drag coefficient
-    A_x = 1;       % Cross-sectional area of the rocket (m^2)
-    Q = 0.2;      % Rate of fuel consumption (s^-1)
-    m_p = 50;     % Mass of fuel (kg)
-    m_d = 50;  % Mass of rocket (kg) (to ensure proper ratio)
-    m_0 = 10*m_d;
+    C_d = 0.5;      % Aerodynamic drag coefficient
+    A_x = 1;        % Cross-sectional area of the rocket (m^2)
+    Q = 0.2;        % Rate of fuel consumption (s^-1)
+    m_p = 50;       % Mass of fuel (kg)
+    m_d = 50;       % Mass of rocket (kg)
+    m_0 = 10 * m_d;
 
+    % Current mass calculation
     current_m = m_d + (m_0 - m_d)*exp(-Q * t);
-    dm = -Q*(m_0 - m_d )*exp(-Q*t);
+    dm = -Q * (m_0 - m_d) * exp(-Q * t);
 
-    % Thrust, only positive force
-    F_t = C_v*dm;
-    
-    % Gravity
-    F_g = (G*m_e*current_m) / (R + h)^2 ;
+    % Thrust force (aligned with the velocity initially)
+    if norm(v) > 0
+        F_t = C_v * dm * (v / norm(v));  % Thrust direction matches velocity direction
+    else
+        F_t = [0; 0; abs(C_v * dm)];  % Initial thrust directed upward if velocity is zero
+    end
 
-    % Air Resistance, dependant on altitude and speed
-    F_d = (.5*rho_0*exp(-h/H)*C_d*A_x*(v^2));
+    % Gravity force (points toward Earth's center)
+    r_mag = norm(r);  % Distance from Earth's center
+    F_g = -((G * m_e * current_m) / (r_mag^2)) * (r / r_mag);  % Gravity vector
 
-    % Sum of all forces...etc
-    netForce = (F_t - F_g - F_d);
-    dv = (netForce/current_m);
+    % Drag force (opposes velocity direction)
+    if norm(v) > 0
+        F_d = -0.5 * rho_0 * exp(-(norm(r) - R)/H) * C_d * A_x * norm(v)^2 * (v / norm(v));  % Drag vector
+    else
+        F_d = [0; 0; 0];  % No drag if velocity is zero
+    end
 
-    % derivative of height is velocity
-    dh = v;
+    % Net force calculation
+    netForce = F_t + F_g + F_d;
+    dv = netForce / current_m;  % Acceleration (dv/dt)
+    dr = v;                      % Change in position (dr/dt)
+    acc = dv;                    % Return acceleration as dv for storing and plotting
 end
 
-function [v_next, h_next] = RK4tStep(t, v, h, dt)
-    k1_v = vdot(t, v, h);
-    k2_v = vdot(t + dt/2, v + (dt*k1_v)/2, h);
-    k3_v = vdot(t + dt/2, v + (dt*k2_v)/2, h);
-    k4_v = vdot(t + dt, v + dt*k3_v, h);
+function [v_next, r_next, acc] = RK4tStep(t, v, r, dt)
+    % Runge-Kutta method for 3D vector-based simulation
+    [k1_v, k1_r, a1] = vdot(t, v, r);
+    [k2_v, k2_r, a2] = vdot(t + dt/2, v + (dt*k1_v)/2, r + (dt*k1_r)/2);
+    [k3_v, k3_r, a3] = vdot(t + dt/2, v + (dt*k2_v)/2, r + (dt*k2_r)/2);
+    [k4_v, k4_r, a4] = vdot(t + dt, v + dt*k3_v, r + dt*k3_r);
 
     dv = (dt/6) * (k1_v + 2*k2_v + 2*k3_v + k4_v);
-
-    % calculates height with current velocity
-    % readjust for efficiency
-    dh = v * dt;
+    dr = (dt/6) * (k1_r + 2*k2_r + 2*k3_r + k4_r);
 
     v_next = v + dv;
-    h_next = h + dh; 
-end 
-
-function [v_next, h_next] = eulerRocket(t, v, h, dt)
-    [dv, dh] = vdot(t, v, h);
-    v_next = v + dt*dv;
-    h_next = h + dt*dh;
-end 
+    r_next = r + dr;
+    acc = (a1 + 2*a2 + 2*a3 + a4) / 6;  % Average acceleration during the step
+end
